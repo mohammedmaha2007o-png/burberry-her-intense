@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 
 <head>
@@ -276,6 +276,20 @@
       box-shadow: var(--shadow-cta);
     }
 
+    .btnOrderNow,
+    .stickyBtn,
+    button[onclick="openOrderModal()"] {
+      background: linear-gradient(180deg, #121212 0%, #030303 100%);
+      color: #fff;
+      box-shadow: 0 14px 32px rgba(0, 0, 0, 0.35);
+    }
+
+    .btnOrderNow:hover,
+    .stickyBtn:hover,
+    button[onclick="openOrderModal()"]:hover {
+      background: linear-gradient(180deg, #1a1a1a 0%, #0a0a0a 100%);
+    }
+
     .btnGhost {
       background: #fff;
       border-color: #d7e0fb;
@@ -382,10 +396,8 @@
       border-radius: 11px;
       border: 0;
       color: #fff;
-      background: linear-gradient(135deg, var(--accent) 0%, var(--accent-2) 100%);
       padding: 0 15px;
       font-weight: 800;
-      box-shadow: var(--shadow-cta);
       cursor: pointer;
       font-family: inherit;
     }
@@ -468,6 +480,50 @@
       display: grid;
       gap: 9px;
       margin-bottom: 12px;
+    }
+
+    .priceBreakdown {
+      border: 1px solid #d9e2fb;
+      background: #f8faff;
+      border-radius: 12px;
+      padding: 12px 14px;
+      margin-bottom: 12px;
+      display: grid;
+      gap: 10px;
+    }
+
+    .priceRow {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      align-items: center;
+      column-gap: 14px;
+      font-size: 0.9rem;
+      color: #374266;
+      line-height: 1.2;
+    }
+
+    .priceRow span {
+      padding-right: 6px;
+    }
+
+    .priceRow strong {
+      color: #1a2551;
+      font-size: 0.92rem;
+      min-width: 92px;
+      text-align: right;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .priceRow.total {
+      margin-top: 2px;
+      padding-top: 10px;
+      border-top: 1px solid #d9e2fb;
+      font-weight: 800;
+    }
+
+    .priceRow.total strong {
+      font-size: 1rem;
+      color: #13204a;
     }
 
     input {
@@ -650,7 +706,7 @@
           </div>
           <div class="actions">
             <button class="btn btnGhost" type="button" onclick="openSizeModal()">Select Size</button>
-            <button class="btn btnMain" type="button" onclick="openOrderModal()">Order Now</button>
+            <button class="btn btnMain btnOrderNow" type="button" onclick="openOrderModal()">Order Now</button>
           </div>
         </div>
       </div>
@@ -717,8 +773,23 @@
         <input id="address" placeholder="Address" autocomplete="street-address" />
       </div>
 
+      <div class="priceBreakdown" id="priceBreakdown">
+        <div class="priceRow">
+          <span>Decant Price</span>
+          <strong id="decantPriceValue">149 DH</strong>
+        </div>
+        <div class="priceRow">
+          <span>Delivery Price</span>
+          <strong id="deliveryPriceValue">35 DH</strong>
+        </div>
+        <div class="priceRow total">
+          <span>Total Price</span>
+          <strong id="totalPriceValue">184 DH</strong>
+        </div>
+      </div>
+
       <div class="modalActions">
-        <button class="btn btnMain" id="confirmOrderBtn" type="button" onclick="sendOrder()">Confirm Order</button>
+        <button class="btn btnMain btnOrderNow" id="confirmOrderBtn" type="button" onclick="sendOrder()">Confirm Order</button>
         <button class="btn btnGhost btnCancel" type="button" onclick="closeOrderModal()">Cancel</button>
       </div>
     </div>
@@ -737,6 +808,8 @@
     <input type="hidden" name="Phone" id="formPhone" />
     <input type="hidden" name="City" id="formCity" />
     <input type="hidden" name="Address" id="formAddress" />
+    <input type="hidden" name="Delivery Price" id="formDeliveryPrice" />
+    <input type="hidden" name="Total Price" id="formTotalPrice" />
     <input type="hidden" name="Message" id="formMessage" />
   </form>
 
@@ -753,6 +826,10 @@
     const orderSuccess = document.getElementById("orderSuccess");
     const confirmOrderBtn = document.getElementById("confirmOrderBtn");
     const autoOrderForm = document.getElementById("autoOrderForm");
+    const cityInput = document.getElementById("city");
+    const decantPriceValue = document.getElementById("decantPriceValue");
+    const deliveryPriceValue = document.getElementById("deliveryPriceValue");
+    const totalPriceValue = document.getElementById("totalPriceValue");
     const mobileSticky = document.getElementById("mobileSticky");
     const priceCase = document.getElementById("priceCase");
 
@@ -773,6 +850,7 @@
       sizePrice.textContent = label;
       stickyPrice.textContent = label;
       orderSummary.textContent = `Burberry Her Intense - ${selectedSize} (${selectedPrice})`;
+      updatePriceBreakdown();
       closeSizeModal();
     }
 
@@ -791,11 +869,76 @@
       orderModal.setAttribute("aria-hidden", "true");
     }
 
+    function normalizeText(value) {
+      return value
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .toLowerCase()
+        .replace(/[^a-z0-9\s]/g, " ")
+        .replace(/\s+/g, " ")
+        .trim();
+    }
+
+    function getDecantAmount() {
+      const parsed = parseInt(selectedPrice, 10);
+      return Number.isFinite(parsed) ? parsed : 0;
+    }
+
+    function getDeliveryPricing(cityValue) {
+      const normalized = normalizeText(cityValue || "");
+
+      const isUirDelivery =
+        /\buir\b/.test(normalized) ||
+        /\buniversite\b.*\binternationale\b.*\brabat\b/.test(normalized) ||
+        /\binternational\b.*\buniversity\b.*\brabat\b/.test(normalized);
+
+      if (isUirDelivery) {
+        return { amount: 0, label: "For Free" };
+      }
+
+      const isRabatArea =
+        /\brabat\b/.test(normalized) ||
+        /\bsale\b/.test(normalized) ||
+        /\bsala\s+al\s+jadida\b/.test(normalized) ||
+        /\bsale\s+al\s+jadida\b/.test(normalized) ||
+        /\btemara\b/.test(normalized);
+
+      if (isRabatArea) {
+        return { amount: 20, label: "20 DH" };
+      }
+
+      return { amount: 35, label: "35 DH" };
+    }
+
+    function updatePriceBreakdown() {
+      const decantAmount = getDecantAmount();
+      const delivery = getDeliveryPricing(cityInput ? cityInput.value : "");
+      const totalAmount = decantAmount + delivery.amount;
+
+      if (decantPriceValue) {
+        decantPriceValue.textContent = `${decantAmount} DH`;
+      }
+      if (deliveryPriceValue) {
+        deliveryPriceValue.textContent = delivery.label;
+      }
+      if (totalPriceValue) {
+        totalPriceValue.textContent = `${totalAmount} DH`;
+      }
+
+      return {
+        decantAmount,
+        deliveryAmount: delivery.amount,
+        deliveryLabel: delivery.label,
+        totalAmount,
+      };
+    }
+
     function sendOrder() {
       const name = document.getElementById("name").value.trim();
       const phone = document.getElementById("phone").value.trim();
       const city = document.getElementById("city").value.trim();
       const address = document.getElementById("address").value.trim();
+      const pricing = updatePriceBreakdown();
 
       if (!name || !phone || !city || !address) {
         orderSuccess.style.display = "none";
@@ -815,7 +958,11 @@
       document.getElementById("formPhone").value = phone;
       document.getElementById("formCity").value = city;
       document.getElementById("formAddress").value = address;
-      document.getElementById("formMessage").value = `Order request for Burberry Her Intense (${selectedSize} - ${selectedPrice}).`;
+      document.getElementById("formDeliveryPrice").value = pricing.deliveryLabel;
+      document.getElementById("formTotalPrice").value = `${pricing.totalAmount} DH`;
+      document.getElementById("formMessage").value =
+        `Order request for Burberry Her Intense (${selectedSize} - ${selectedPrice}). ` +
+        `Delivery: ${pricing.deliveryLabel}. Total: ${pricing.totalAmount} DH.`;
 
       autoOrderForm.submit();
 
@@ -884,6 +1031,12 @@
     window.addEventListener("load", requestStickyUpdate);
     requestStickyUpdate();
 
+    if (cityInput) {
+      cityInput.addEventListener("input", updatePriceBreakdown);
+      cityInput.addEventListener("change", updatePriceBreakdown);
+    }
+    updatePriceBreakdown();
+
     window.addEventListener("click", (event) => {
       if (event.target === sizeModal) {
         closeSizeModal();
@@ -903,3 +1056,8 @@
 </body>
 
 </html>
+
+
+
+
+
